@@ -1,0 +1,37 @@
+#!/bin/sh
+# Lil Torch agent installer.
+#
+#   curl -fsSL https://raw.githubusercontent.com/szcharlesji/lil-torch/main/install.sh | sh
+#   curl -fsSL .../install.sh | sh -s -- --netid abc123      # skip the prompt
+#   ssh lab-machine 'sh -s -- --netid abc123' < install.sh   # without hosting
+#   ... | sh -s -- --uninstall
+#
+# Run it on a lab machine you can log into (on NYU's network, so Torch needs no
+# VPN). It installs a per-user service, no root needed, that watches your Torch
+# jobs and the lab's GPUs and serves them to the Lil Torch iPhone app over
+# Tailscale. Running it again upgrades in place and keeps your pairing.
+# Other options go to `liltorch_agent.py setup` (--gpus, --name, --apns-key, ...).
+set -eu
+
+dir="$HOME/.local/share/lil-torch"
+python=$(command -v python3 || true)
+if [ -z "$python" ] || ! "$python" -c 'import sys; sys.exit(sys.version_info < (3, 8))'; then
+  echo "Lil Torch needs Python 3.8 or newer (python3)." >&2
+  exit 1
+fi
+command -v ssh >/dev/null 2>&1 || { echo "Lil Torch needs ssh." >&2; exit 1; }
+command -v tailscale >/dev/null 2>&1 || echo "Note: tailscale isn't installed here; the app reaches the agent over Tailscale." >&2
+
+if [ "${1-}" = "--uninstall" ]; then
+  if [ -f "$dir/liltorch_agent.py" ]; then exec "$python" "$dir/liltorch_agent.py" uninstall; fi
+  echo "Lil Torch isn't installed."
+  exit 0
+fi
+
+mkdir -p "$dir"
+cat > "$dir/liltorch_agent.py.new" <<'LILTORCH_AGENT_SOURCE'
+@AGENT@
+LILTORCH_AGENT_SOURCE
+chmod 700 "$dir/liltorch_agent.py.new"
+mv "$dir/liltorch_agent.py.new" "$dir/liltorch_agent.py"
+exec "$python" "$dir/liltorch_agent.py" setup "$@"
